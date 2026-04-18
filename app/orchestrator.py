@@ -8,67 +8,72 @@ log = logging.getLogger(__name__)
 
 class Orchestrator:
     def __init__(self):
-        # You can specify the local models you want to use here
-        self.model_fast = 'qwen2.5:3b'  # Lightweight model for scoring
-        self.model_smart = 'qwen2.5:3b' # More capable model for final responses
+        # Using local Ollama models
+        self.model_fast = 'qwen2.5:3b'  # The "Moderator" (Manager)
+        self.model_smart = 'qwen2.5:3b' # The "Speaker" (Persona)
         self.client = ollama.AsyncClient()
-        log.info("Orchestrator initialized", extra={"model_fast": self.model_fast, "model_smart": self.model_smart})
+        log.info("Orchestrator initialized in Moderator Mode", 
+                 extra={"moderator_model": self.model_fast, "persona_model": self.model_smart})
 
-    def get_direct_mention(self, message, personas): 
-        log.info("Checking direct mentions", extra={"search_text": message})
-        for p in personas: 
-            # Checks if "@Scientist" is in the text 
-            pattern = rf"(?<!\w)@{re.escape(p.name)}\b"
-            if re.search(pattern, message, re.IGNORECASE):
-                log.info("Direct mention matched persona", extra={"persona": p.name})
-                return p
-        log.info("No direct mention matched")
-        return None
-
-    async def get_score(self, persona, user_input, context):
-        """Asks a persona to rate their interest in the topic."""
-        prompt = f"""
-        Context: {context}
-        New Message: {user_input}
-        
-        As the persona '{persona.name}', how relevant is your expertise to this message?
-        Rate from 1 to 10. Respond with ONLY the number.
+    async def decide_speaker(self, user_input, context):
         """
+        A single call to decide which persona should speak next.
+        """
+        # Create a list of persona descriptions for the moderator to review
+        persona_list = "\n".join([f"- {p.name}: {p.description}" for p in PERSONAS])
+        
+        moderator_prompt = f"""
+        You are a conversation moderator. We have a group chat with the following people:
+        {persona_list}
+
+        CHAT HISTORY:
+        {context}
+
+        NEW USER MESSAGE:
+        "{user_input}"
+
+        TASK:
+        Based on the history and the new message, decide who should speak next. 
+        - Pick the person with the most relevant expertise.
+        - If the user is asking a general question, pick who would have the most interesting take.
+        - Only provide the NAME of the persona.
+
+        RESPONSE FORMAT: Just the name.
+        """
+
         try:
-            response = await self.client.generate(model=self.model_fast, prompt=prompt)
-            score = int(re.search(r'\d+', response['response']).group())
-            log.info("Persona score calculated", extra={"persona": persona.name, "score": score})
-            return score
+            response = await self.client.generate(model=self.model_fast, prompt=moderator_prompt)
+            chosen_name = response['response'].strip().replace(".", "")
+            
+            # Match the text response back to our Persona object
+            for p in PERSONAS:
+                if p.name.lower() in chosen_name.lower():
+                    log.info("Moderator selected speaker", extra={"winner": p.name})
+                    return p
+            
+            # Fallback if the moderator hallucinates a name
+            log.warning("Moderator gave invalid name, falling back to first persona")
+            return PERSONAS[0]
+            
         except Exception as exc:
-            log.exception("Error calculating persona score", exc_info=exc, extra={"persona": persona.name})
-            return 1  # Default to low interest on error
+            log.exception("Moderator decision failed", exc_info=exc)
+            return PERSONAS[0]
 
     async def chat(self, user_input, memory):
         context = memory.get_full_context()
-        log.info("Starting chat flow", extra={"user_input": user_input, "context_length": len(context)})
+        log.info("Starting chat flow", extra={"user_input": user_input})
+    
+        # 1. MODERATION: If no one was mentioned, let the Moderator decide
+        winner = await self.decide_speaker(user_input, context)
         
-        # 1. Direct Mention Check
-        winner = self.get_direct_mention(user_input, PERSONAS)
-        if winner is None:
-            # 2. Competitive Scoring (Parallel)
-            tasks = [self.get_score(p, user_input, context) for p in PERSONAS]
-            scores = await asyncio.gather(*tasks)
-            log.info("All persona scores returned", extra={"scores": scores})
-            
-            # Find the index of the highest score
-            winner_index = scores.index(max(scores))
-            winner = PERSONAS[winner_index]
-            log.info("Winner selected by scoring", extra={"winner": winner.name, "score": scores[winner_index]})
-        else:
-            log.info("Winner selected by direct mention", extra={"winner": winner.name})
-
-        # 3. Final Generation
-        full_prompt = f"System: {winner.system_instructions}\nHistory: {context}\nUser: {user_input}"
-        log.info("Sending prompt to model", extra={"winner": winner.name})
+        # 2. GENERATION: The chosen persona speaks
+        # We include the persona's identity in the system prompt
+        full_prompt = f"Identity: {winner.system_instructions}\n\nHistory:\n{context}\n\nUser: {user_input}\n{winner.name}:"
+        
         try:
             response = await self.client.generate(model=self.model_smart, prompt=full_prompt)
-            log.info("Model returned response", extra={"response_length": len(response.get('response', ''))})
+            log.info("Persona responded", extra={"speaker": winner.name})
             return winner.name, response['response']
         except Exception as exc:
-            log.exception("Error generating final response", exc_info=exc, extra={"winner": winner.name})
-            return winner.name, "Sorry, I could not generate a response right now."
+            log.exception("Error generating final response", exc_info=exc)
+            return winner.name, "I'm having trouble thinking of what to say right now."
