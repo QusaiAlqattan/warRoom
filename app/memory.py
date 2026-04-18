@@ -1,13 +1,23 @@
+import logging
+
+log = logging.getLogger(__name__)
+
 class ChatMemory:
     def __init__(self):
         self.history = []
+        log.info("ChatMemory initialized")
 
-    def add_message(self, role, name, content):
-        self.history.append({"role": role, "name": name, "content": content})
+    def add_message(self, role, person_name, content):
+        self.history.append({"role": role, "name": person_name, "content": content})
+        log.info("Message added to memory", extra={"role": role, "person_name": person_name, "content": content})
 
     def get_full_context(self):
         # Format history for the LLM
-        return "\n".join([f"{m['name']}: {m['content']}" for m in self.history])
+        context = "\n".join([f"{m['name']}: {m['content']}" for m in self.history])
+        log.info("Full context generated", extra={"length": len(self.history)})
+        return context
 
     def get_recent_context(self, limit=10):
-        return self.history[-limit:]
+        recent = self.history[-limit:]
+        log.info("Recent context retrieved", extra={"limit": limit, "count": len(recent)})
+        return recent
