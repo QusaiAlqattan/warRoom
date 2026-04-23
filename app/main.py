@@ -5,6 +5,8 @@ from .orchestrator import Orchestrator
 from .memory import ChatMemory
 import os
 from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 load_dotenv()
 
@@ -67,3 +69,6 @@ async def handle_chat(request: ChatRequest):
         "speaker": name,
         "content": response_text
     }
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+app.mount("/", StaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")

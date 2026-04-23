@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>War Room</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>War Room</h1>
+      <p class="subtitle">Tesla &middot; Napoleon &middot; Leonardo</p>
+    </header>
+
+    <div id="chat" class="chat-container"></div>
+
+    <form id="chat-form" class="input-area">
+      <input
+        id="user-input"
+        type="text"
+        placeholder="Say something… (use @Name to summon someone)"
+        autocomplete="off"
+      />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
