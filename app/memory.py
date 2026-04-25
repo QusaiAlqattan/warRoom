@@ -21,3 +21,10 @@ class ChatMemory:
         recent = self.history[-limit:]
         log.info("Recent context retrieved", extra={"limit": limit, "count": len(recent)})
         return recent
+
+    def get_last_speaker(self):
+        """Return the name of the last assistant who spoke, or None."""
+        for m in reversed(self.history):
+            if m["role"] == "assistant":
+                return m["name"]
+        return None

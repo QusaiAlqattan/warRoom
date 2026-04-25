@@ -7,10 +7,26 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
+
+  <!-- ===== SCREEN 1: Persona selection ===== -->
+  <div id="lobby" class="app">
     <header>
       <h1>War Room</h1>
-      <p class="subtitle">Tesla &middot; Napoleon &middot; Leonardo</p>
+      <p class="subtitle">Choose who sits at the table</p>
+    </header>
+
+    <div id="persona-grid" class="persona-grid"></div>
+
+    <div class="lobby-footer">
+      <button id="create-room-btn" disabled>Create Room</button>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN 2: Chat room ===== -->
+  <div id="room" class="app" style="display:none">
+    <header>
+      <h1>War Room</h1>
+      <p id="room-subtitle" class="subtitle"></p>
     </header>
 
     <div id="chat" class="chat-container"></div>
@@ -23,6 +39,7 @@
         autocomplete="off"
       />
       <button type="submit" id="send-btn">Send</button>
+      <button type="button" id="stop-btn" style="display:none">Stop</button>
     </form>
   </div>
 

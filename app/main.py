@@ -1,8 +1,11 @@
 import logging
-from fastapi import FastAPI
+import uuid
+from typing import List
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from .orchestrator import Orchestrator
 from .memory import ChatMemory
+from .personas import PERSONAS
 import os
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
@@ -41,9 +44,11 @@ log = logging.getLogger("warRoom")
 
 app = FastAPI()
 
-# Initialize global state
-memory = ChatMemory()
-orchestrator = Orchestrator()
+# rooms: dict of room_id -> { "personas": [Persona, ...], "memory": ChatMemory, "orchestrator": Orchestrator }
+rooms: dict = {}
+
+class CreateRoomRequest(BaseModel):
+    persona_names: List[str]
 
 class ChatRequest(BaseModel):
     message: str
@@ -52,23 +57,70 @@ class ChatRequest(BaseModel):
 async def startup_event():
     log.info("Starting warRoom FastAPI application")
 
-@app.post("/chat")
-async def handle_chat(request: ChatRequest):
-    log.info("Received chat request", extra={"user_message": request.message})
-    # 1. Save user message to memory
-    memory.add_message("user", "User", request.message)
-    
-    # 2. Get the winning persona to speak
-    name, response_text = await orchestrator.chat(request.message, memory)
-    log.info("Chat response ready", extra={"speaker": name})
-    
-    # 3. Save AI message to memory
-    memory.add_message("assistant", name, response_text)
-    
-    return {
-        "speaker": name,
-        "content": response_text
+@app.get("/personas")
+async def list_personas():
+    """Return all available personas for the selection screen."""
+    return [{"name": p.name, "description": p.description.strip()} for p in PERSONAS]
+
+@app.post("/rooms")
+async def create_room(request: CreateRoomRequest):
+    """Create a new room with the selected personas."""
+    if not request.persona_names:
+        raise HTTPException(status_code=400, detail="Select at least one persona")
+
+    selected = [p for p in PERSONAS if p.name in request.persona_names]
+    if not selected:
+        raise HTTPException(status_code=400, detail="No valid personas selected")
+
+    room_id = uuid.uuid4().hex[:8]
+    rooms[room_id] = {
+        "personas": selected,
+        "memory": ChatMemory(),
+        "orchestrator": Orchestrator(),
     }
+    log.info("Room created", extra={"room_id": room_id, "personas": [p.name for p in selected]})
+    return {"room_id": room_id, "personas": [p.name for p in selected]}
+
+@app.post("/rooms/{room_id}/chat")
+async def handle_chat(room_id: str, request: ChatRequest):
+    if room_id not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room = rooms[room_id]
+    memory = room["memory"]
+    orchestrator = room["orchestrator"]
+    persona_list = room["personas"]
+
+    log.info("Received chat request", extra={"room_id": room_id, "user_message": request.message})
+    memory.add_message("user", "User", request.message)
+
+    name, response_text = await orchestrator.chat(request.message, memory, persona_list)
+    log.info("Chat response ready", extra={"room_id": room_id, "speaker": name})
+
+    memory.add_message("assistant", name, response_text)
+
+    return {"speaker": name, "content": response_text}
+
+@app.post("/rooms/{room_id}/continue")
+async def handle_continue(room_id: str):
+    """Let the personas continue talking to each other without user input."""
+    if room_id not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room = rooms[room_id]
+    memory = room["memory"]
+    orchestrator = room["orchestrator"]
+    persona_list = room["personas"]
+
+    if len(persona_list) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 personas for auto-chat")
+
+    name, response_text = await orchestrator.continue_chat(memory, persona_list)
+    log.info("Auto-chat response", extra={"room_id": room_id, "speaker": name})
+
+    memory.add_message("assistant", name, response_text)
+
+    return {"speaker": name, "content": response_text}
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/", StaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")
