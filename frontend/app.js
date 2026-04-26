@@ -86,7 +86,7 @@ function addMessage(role, speaker, text) {
 
   if (role === "assistant") {
     const tag = document.createElement("div");
-    tag.classList.add("speaker-tag", `speaker-${speaker}`);
+    tag.classList.add("speaker-tag", `speaker-${speaker.replace(/\s+/g, "-")}`);
     tag.textContent = speaker;
     el.appendChild(tag);
   }
@@ -104,7 +104,7 @@ function showThinking() {
   const el = document.createElement("div");
   el.classList.add("thinking");
   el.id = "thinking";
-  el.innerHTML = 'Thinking<span class="dots"></span>';
+  el.innerHTML = 'Typing<span class="dots"></span>';
   chat.appendChild(el);
   chat.scrollTop = chat.scrollHeight;
 }

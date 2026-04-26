@@ -1,11 +1,4 @@
 Main fetures to be added:
-- Chat:
-1- enable the AIs to talk with each other:
-  
-
-
 1- summarize memory
-2- UI: persoan creation, chat, room creation
+2- UI: persoan creation, chat
 3- store personas in DB
-4- AI talk to each other
-5- 

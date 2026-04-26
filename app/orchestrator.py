@@ -96,7 +96,6 @@ class Orchestrator:
         The conversation is flowing naturally between the personas. Decide who should speak next.
         - Do NOT pick {last_speaker_name} again.
         - Pick the person who would most naturally want to respond, disagree, add to, or build on what was just said.
-        - Only provide the NAME of the persona.
 
         RESPONSE FORMAT (JSON ONLY):
         {{
