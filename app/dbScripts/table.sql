@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS PERSONAS (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    description TEXT,
-    system_instructions TEXT
+    description TEXT NOT NULL
 );

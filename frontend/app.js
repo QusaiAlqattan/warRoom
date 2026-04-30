@@ -192,7 +192,14 @@ form.addEventListener("submit", async (e) => {
     addMessage("assistant", data.speaker, data.content);
 
     // Kick off the auto-chat loop after the first response
-    startAutoChat();
+    let personaCount = 0;
+    document.getElementById("room-subtitle").textContent.split("·").forEach(() => personaCount++);
+    if ( personaCount > 1 ) {
+      console.log('Starting auto-chat loop...');
+      startAutoChat();
+    } else {
+      sendBtn.disabled = false;
+    }
   } catch (err) {
     hideThinking();
     addMessage("assistant", "System", "Something went wrong. Check the console.");

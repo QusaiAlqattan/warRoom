@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from .orchestrator import Orchestrator
 from .memory import ChatMemory
-from .personas import PERSONAS
+from .personas import PERSONAS, Persona, get_personas_from_db, insert_persona_to_db, delete_persona_from_db
 import os
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
@@ -122,5 +122,85 @@ async def handle_continue(room_id: str):
 
     return {"speaker": name, "content": response_text}
 
+class CreatePersonaRequest(BaseModel):
+    name: str
+    short_description: str
+    traits: str
+    cognitive_style: str
+    social_behavior: str
+    representative_quote: str
+    interests: str
+
+@app.post("/personas")
+async def create_persona(request: CreatePersonaRequest):
+    """Create a new custom persona and store it in the DB."""
+    name = request.name.strip()
+    short_desc = request.short_description.strip()
+    traits = request.traits.strip()
+    cognitive = request.cognitive_style.strip()
+    social = request.social_behavior.strip()
+    quote = request.representative_quote.strip()
+    interests = request.interests.strip()
+
+    if not all([name, short_desc, traits, cognitive, social, quote, interests]):
+        raise HTTPException(status_code=400, detail="All fields are required")
+
+    # Check for duplicate name
+    for p in PERSONAS:
+        if p.name.lower() == name.lower():
+            raise HTTPException(status_code=409, detail=f"Persona '{name}' already exists")
+
+    # Build description (only description, prefix/suffix will be added at runtime)
+    description = f"{short_desc}Traits: {traits}Cognitive Style: {cognitive}Social Behavior: {social}Interests: {interests}The \"Representative Quote\": \"{quote}\""
+
+    try:
+        insert_persona_to_db(name, description)
+    except Exception as e:
+        log.exception("Failed to insert persona into DB")
+        raise HTTPException(status_code=500, detail="Database error")
+
+    # Reload in-memory list
+    PERSONAS.clear()
+    PERSONAS.extend(get_personas_from_db())
+    log.info("Persona created", extra={"persona_name": name})
+
+    return {"name": name, "description": description}
+
+@app.delete("/personas/{persona_name}")
+async def remove_persona(persona_name: str):
+    """Delete a custom persona from the DB."""
+    found = any(p.name.lower() == persona_name.lower() for p in PERSONAS)
+    if not found:
+        raise HTTPException(status_code=404, detail="Persona not found")
+
+    try:
+        delete_persona_from_db(persona_name)
+    except Exception as e:
+        log.exception("Failed to delete persona from DB")
+        raise HTTPException(status_code=500, detail="Database error")
+
+    PERSONAS.clear()
+    PERSONAS.extend(get_personas_from_db())
+    log.info("Persona deleted", extra={"persona_name": persona_name})
+
+    return {"deleted": persona_name}
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/", StaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")
+
+
+"""
+prefix: This is a conversation between multiple personas. You are playing the role of
+
+short description: 
+
+Cognitive Style:
+
+Traits:
+
+Social Behavior:
+
+Representative Quote:
+
+sufix: Always respond in the style of your character and never reveal that you are an AI. Always make your answers short (one to three sentences). Always answer in English.
+"""

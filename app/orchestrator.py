@@ -8,6 +8,9 @@ from .personas import PERSONAS
 log = logging.getLogger(__name__)
 
 class Orchestrator:
+    PREFIX = "This is a conversation between multiple personas. You are playing the role of"
+    SUFFIX = "ALWAYS RESPOND IN YOUR CHARACTER and never reveal that you are an AI. Always make your answers short (one to three sentences). Always answer in English. Continue the conversation naturally. You may agree, disagree, ask a question, or build on the topic. Do NOT start your response with your name or any label prefix like 'Name:'. JUST INCLUDE THE RESPONSE TEXT."
+
     def __init__(self):
         # Using local Ollama models
         self.model_fast = 'qwen2.5:3b'  # The "Moderator" (Manager)
@@ -15,6 +18,14 @@ class Orchestrator:
         self.client = ollama.AsyncClient()
         log.info("Orchestrator initialized in Moderator Mode", 
                  extra={"moderator_model": self.model_fast, "persona_model": self.model_smart})
+
+    def strip_name_prefix(self, name, text):
+        """Remove the persona's name prefix if the model echoed it back."""
+        stripped = text.strip()
+        # Match patterns like "Napoleon:" or "Napoleon: "
+        pattern = rf"^{re.escape(name)}\s*:\s*"
+        stripped = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE)
+        return stripped.strip()
 
     def get_direct_mention(self, message, personas): 
         for p in personas: 
@@ -133,17 +144,19 @@ class Orchestrator:
         winner = await self.decide_next_speaker(context, personas, last_speaker)
 
         full_prompt = (
-            f"Identity: {winner.system_instructions}\n\n"
-            f"History:\n{context}\n\n"
-            f"Continue the conversation naturally. Respond to what was just said. "
-            f"You may agree, disagree, ask a question, or build on the topic.\n"
-            f"{winner.name}:"
+            f" {self.PREFIX},"
+            f" Name:{winner.name},"
+            f" Identity:{winner.description},"
+            f" Chat History:{context},"
+            f" {self.SUFFIX}"
         )
+        log.info("continue_chat prompt", extra={"full_prompt": full_prompt})
+
 
         try:
             response = await self.client.generate(model=self.model_smart, prompt=full_prompt)
             log.info("Persona responded (auto)", extra={"speaker": winner.name})
-            return winner.name, response['response']
+            return winner.name, self.strip_name_prefix(winner.name, response['response'])
         except Exception as exc:
             log.exception("Error in autonomous response", exc_info=exc)
             return winner.name, "I'm having trouble thinking of what to say right now."
@@ -152,21 +165,36 @@ class Orchestrator:
         context = memory.get_full_context()
         log.info("Starting chat flow", extra={"user_input": user_input})
         
-        # 1. PRIORITY: Direct Mention Check (@Name)
-        winner = self.get_direct_mention(user_input, personas)
-        
-        # 2. MODERATION: If no one was mentioned, let the Moderator decide
-        if winner is None:
-            winner = await self.decide_speaker(user_input, context, personas)
+        if (len(personas) > 1):
+            # 1. PRIORITY: Direct Mention Check (@Name)
+            winner = self.get_direct_mention(user_input, personas)
+            
+            # 2. MODERATION: If no one was mentioned, let the Moderator decide
+            if winner is None:
+                winner = await self.decide_speaker(user_input, context, personas)
+
+        else:
+            winner = personas[0]
+            log.info("Only one persona available, skipping moderation", extra={"speaker": winner.name})
         
         # 3. GENERATION: The chosen persona speaks
         # We include the persona's identity in the system prompt
-        full_prompt = f"Identity: {winner.system_instructions}\n\nHistory:\n{context}\n\nUser: {user_input}\n{winner.name}:"
+        full_prompt = (
+            f"{self.PREFIX},"
+            f" Name:{winner.name},"
+            f" Identity:{winner.description},"
+            f" Chat History:{context},"
+            f" User Input: {user_input},"
+            f" {self.SUFFIX}"
+        )
+
+        log.info("chat prompt", extra={"full_prompt": full_prompt})
+
         
         try:
             response = await self.client.generate(model=self.model_smart, prompt=full_prompt)
             log.info("Persona responded", extra={"speaker": winner.name})
-            return winner.name, response['response']
+            return winner.name, self.strip_name_prefix(winner.name, response['response'])
         except Exception as exc:
             log.exception("Error generating final response", exc_info=exc)
             return winner.name, "I'm having trouble thinking of what to say right now."

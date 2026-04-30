@@ -1,4 +1,11 @@
 Main fetures to be added:
-1- summarize memory
-2- UI: persoan creation, chat
-3- store personas in DB
+- summarize memory
+- UI: persona creation, images, my personas page, persona colores in chat
+- make personas agintic (by searching for more details about the persona)
+- OAuth login
+- chat: mutiresponse, who is typing
+- persona: less helpfull, no question at the end
+- business: persona store, freemuim model
+- store chats
+- edit message
+- generate a vedio for the conversation, with customization regarding the room and the settings

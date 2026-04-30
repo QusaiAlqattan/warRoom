@@ -1,48 +1,63 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import sql
+
+DB_PARAMS = {
+    "dbname": "postgres",
+    "user": "postgres",
+    "password": "12345",
+    "host": "localhost",
+    "port": "5433"
+}
 
 class Persona:
-    def __init__(self, name, description, system_instructions):
+    def __init__(self, name, description):
         self.name = name
         self.description = description
-        self.system_instructions = system_instructions
 
 def get_personas_from_db():
-    # Database configuration
-    conn_params = {
-        "dbname": "postgres",
-        "user": "postgres",
-        "password": "12345",
-        "host": "localhost",
-        "port": "5433"
-    }
-    
     loaded_personas = []
     
     try:
-        # Connect to your postgres DB
-        conn = psycopg2.connect(**conn_params)
+        conn = psycopg2.connect(**DB_PARAMS)
         
-        # Use RealDictCursor to map column names to dictionary keys
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT name, description, system_instructions FROM PERSONAS;")
+            cur.execute("SELECT name, description FROM PERSONAS;")
             rows = cur.fetchall()
             
-            # Map each database row to a Persona object
             for row in rows:
                 new_persona = Persona(
                     name=row['name'],
-                    description=row['description'],
-                    system_instructions=row['system_instructions']
+                    description=row['description']
                 )
                 loaded_personas.append(new_persona)
                 
         conn.close()
     except Exception as e:
         print(f"Critical Error: Could not load personas from database: {e}")
-        # Optional: return a default persona or empty list so the app doesn't crash
     
     return loaded_personas
+
+def insert_persona_to_db(name, description):
+    conn = psycopg2.connect(**DB_PARAMS)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO PERSONAS (name, description) VALUES (%s, %s);",
+                (name, description)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+def delete_persona_from_db(name):
+    conn = psycopg2.connect(**DB_PARAMS)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM PERSONAS WHERE name = %s;", (name,))
+        conn.commit()
+    finally:
+        conn.close()
 
 # This now replaces your hardcoded list
 PERSONAS = get_personas_from_db()
