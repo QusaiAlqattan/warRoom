@@ -9,3 +9,4 @@ Main fetures to be added:
 - store chats
 - edit message
 - generate a vedio for the conversation, with customization regarding the room and the settings
+- multiple rooms
